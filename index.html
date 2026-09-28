@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Control de Asistencia Institucional</title>
+    <!-- CDN Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librerías de exportación -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body class="bg-gray-100 font-sans min-h-screen text-gray-800">
+
+    <!-- CABECERA PRINCIPAL -->
+    <header class="bg-blue-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 class="text-xl font-bold">Control de Asistencia</h1>
+            <nav class="flex flex-wrap gap-1 bg-blue-950 p-1 rounded-lg text-sm font-medium">
+                <button onclick="cambiarPestana('sec-marcaje')" id="btn-marcaje"
+                    class="nav-btn px-4 py-2 rounded-md bg-blue-600 text-white transition">Marcaje / Escáner</button>
+                <button onclick="cambiarPestana('sec-fichas')" id="btn-fichas"
+                    class="nav-btn px-4 py-2 rounded-md text-gray-300 hover:bg-blue-800 hover:text-white transition">Fichas
+                    / Personas</button>
+                <button onclick="cambiarPestana('sec-horarios')" id="btn-horarios"
+                    class="nav-btn px-4 py-2 rounded-md text-gray-300 hover:bg-blue-800 hover:text-white transition">Horarios</button>
+                <button onclick="cambiarPestana('sec-permisos')" id="btn-permisos"
+                    class="nav-btn px-4 py-2 rounded-md text-gray-300 hover:bg-blue-800 hover:text-white transition">Permisos</button>
+                <button onclick="cambiarPestana('sec-resumen')" id="btn-resumen"
+                    class="nav-btn px-4 py-2 rounded-md text-gray-300 hover:bg-blue-800 hover:text-white transition">Resumen</button>
+                <button onclick="cambiarPestana('sec-reportes')" id="btn-reportes"
+                    class="nav-btn px-4 py-2 rounded-md text-gray-300 hover:bg-blue-800 hover:text-white transition">Historial</button>
+                <button onclick="cambiarPestana('sec-config')" id="btn-config"
+                    class="nav-btn px-4 py-2 rounded-md text-gray-300 hover:bg-blue-800 hover:text-white transition">Configuración</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 md:p-6">
+
+        <!-- NOTIFICACIÓN TOAST -->
+        <div id="toast"
+            class="fixed bottom-4 right-4 text-white px-4 py-2 rounded shadow-lg transition-all text-sm font-semibold z-50 hidden">
+        </div>
+
+        <!-- 1. SECCIÓN MARCAJE -->
+        <section id="sec-marcaje" class="tab-content space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold text-gray-900 mb-2">Escáner de Asistencia (RFID / Cédula)</h2>
+                <p class="text-sm text-gray-500 mb-4">Pase el carnet por el lector o ingrese la cédula manualmente y
+                    presione Enter.</p>
+
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <label class="flex items-center gap-2 text-sm font-semibold">
+                        <input type="radio" name="tipoEvento" value="AUTO" checked class="text-blue-600">
+                        Automático (Entrada / Salida según horario)
+                    </label>
+                    <label class="flex items-center gap-2 text-sm font-semibold text-orange-600">
+                        <input type="radio" name="tipoEvento" value="SALIDA_TEMPRANA" class="text-orange-600">
+                        Salida Temprana (Autorizada por Dirección)
+                    </label>
+                </div>
+
+                <div class="flex gap-2">
+                    <input type="text" id="inputMarcaje" placeholder="Código RFID o Cédula..." autofocus
+                        autocomplete="off"
+                        class="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+                    <button onclick="procesarMarcaje()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition">
+                        Registrar
+                    </button>
+                </div>
+            </div>
+
+            <!-- TARJETA ÚLTIMO MARCAJE -->
+            <div id="tarjetaUltimoMarcaje" class="hidden"></div>
+        </section>
+
+        <!-- 2. SECCIÓN GESTIÓN DE FICHAS -->
+        <section id="sec-fichas" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- FORMULARIO FICHA -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-1">
+                    <h2 id="tituloFormFicha" class="text-lg font-bold text-gray-900 mb-4">Crear Nueva Ficha</h2>
+                    <form id="formFicha" class="space-y-4">
+                        <input type="hidden" id="fichaIdOriginal">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Cédula</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="cedula" required
+                                    class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <button type="button" onclick="buscarFichaPorCedula()"
+                                    class="bg-gray-700 hover:bg-gray-800 text-white px-3 py-2 rounded-md text-xs font-semibold transition">
+                                    Buscar
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Código RFID /
+                                Carnet</label>
+                            <input type="text" id="codigoRfid"
+                                class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Nombre Completo</label>
+                            <input type="text" id="nombreCompleto" required
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Rol</label>
+                            <select id="rolPersona" onchange="toggleCamposEstudiante()"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="ESTUDIANTE">ESTUDIANTE</option>
+                                <option value="DOCENTE">DOCENTE</option>
+                                <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
+                                <option value="OBRERO">OBRERO</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label id="lblAnoSeccion" class="block text-xs font-bold uppercase text-gray-600 mb-1">Año y
+                                Sección</label>
+                            <input type="text" id="anoSeccion" placeholder="Ej: 5A o Mantenimiento"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Teléfono Representante
+                                (SMS / WhatsApp)</label>
+                            <input type="text" id="telefono" placeholder="Ej: +584141234567"
+                                class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                            <button type="submit" id="btnSubmitFicha"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md text-sm transition">Guardar
+                                Ficha</button>
+                            <button type="button" id="btnCancelarEdicion" onclick="limpiarFormularioFicha()"
+                                class="hidden w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 rounded-md text-sm transition">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- TABLA DE FICHAS -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                        <h2 class="text-lg font-bold text-gray-900">Listado de Fichas</h2>
+                        <input type="text" id="buscarFichaInput" onkeyup="filtrarFichasLocales()"
+                            placeholder="Filtrar por cédula o nombre..."
+                            class="px-3 py-1.5 border rounded-md text-sm w-full sm:w-64 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-gray-600">
+                            <thead class="bg-gray-50 text-gray-700 uppercase text-xs font-semibold">
+                                <tr>
+                                    <th class="p-3">Cédula</th>
+                                    <th class="p-3">Nombre</th>
+                                    <th class="p-3">Rol</th>
+                                    <th class="p-3">Sección/Dpto</th>
+                                    <th class="p-3">Teléfono</th>
+                                    <th class="p-3 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuerpoTablaFichas" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. SECCIÓN HORARIOS -->
+        <section id="sec-horarios" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
+                    <h2 class="text-lg font-bold text-gray-900 mb-4">Asignar Horario</h2>
+                    <form id="formHorario" class="space-y-4">
+                        <input type="hidden" id="idHorarioEdicion">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Tipo de Horario</label>
+                            <div class="flex gap-4 py-1">
+                                <label class="flex items-center gap-2 text-sm">
+                                    <input type="radio" name="tipoHorario" id="tipoSeccion" value="SECCION" checked
+                                        onchange="alternarTipoHorario()">
+                                    Por Sección / Año (Estudiantes)
+                                </label>
+                                <label class="flex items-center gap-2 text-sm">
+                                    <input type="radio" name="tipoHorario" id="tipoPersonal" value="PERSONAL"
+                                        onchange="alternarTipoHorario()">
+                                    Personal (Docente / Admin / Obrero)
+                                </label>
+                            </div>
+                        </div>
+                        <div id="camposSeccion">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Año /
+                                        Nivel</label>
+                                    <input type="text" id="anoHorario" placeholder="Ej: 5"
+                                        class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Sección</label>
+                                    <input type="text" id="seccionHorario" placeholder="Ej: A"
+                                        class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+                        <div id="camposPersonal" class="hidden">
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Ficha del
+                                Personal</label>
+                            <select id="cedulaPersonalHorario"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">-- Seleccione una ficha de personal --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Tolerancia
+                                (Minutos)</label>
+                            <input type="number" id="tolerancia" value="10" required min="0"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-2">Horario Semanal (Entrada
+                                / Salida por día)</label>
+                            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                                <table class="w-full text-sm text-gray-600">
+                                    <thead class="bg-gray-50 text-gray-700 uppercase text-xs font-semibold">
+                                        <tr>
+                                            <th class="p-2 text-left">Día</th>
+                                            <th class="p-2 text-center">Entrada</th>
+                                            <th class="p-2 text-center">Salida</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tablaHorarioSemanal" class="divide-y divide-gray-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <button type="submit"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md text-sm transition">Guardar
+                            Horario</button>
+                    </form>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-3">
+                    <h2 class="text-lg font-bold text-gray-900 mb-4">Horarios Establecidos</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-gray-600">
+                            <thead class="bg-gray-50 text-gray-700 uppercase text-xs font-semibold">
+                                <tr>
+                                    <th class="p-3">Tipo</th>
+                                    <th class="p-3">Destino / Persona</th>
+                                    <th class="p-3">Semana</th>
+                                    <th class="p-3 text-center">Tolerancia</th>
+                                    <th class="p-3 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuerpoTablaHorarios" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. SECCIÓN PERMISOS -->
+        <section id="sec-permisos" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 max-w-2xl mx-auto">
+                <h2 class="text-lg font-bold text-gray-900 mb-4">Registrar Permiso o Justificativo</h2>
+                <form id="formPermiso" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Cédula del
+                            Solicitante</label>
+                        <input type="text" id="cedulaPermiso" required
+                            class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Tipo de Permiso</label>
+                        <select id="tipoPermiso"
+                            class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="MEDICO">Médico</option>
+                            <option value="PERSONAL">Personal / Institucional</option>
+                            <option value="SUSPENSION">Suspensión</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Desde</label>
+                            <input type="date" id="fechaDesde" required
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Hasta</label>
+                            <input type="date" id="fechaHasta" required
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Motivo / Descripción</label>
+                        <textarea id="motivo" rows="3" required
+                            class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+                    </div>
+                    <button type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md text-sm transition">Registrar
+                        Permiso</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- 5. SECCIÓN RESUMEN -->
+        <section id="sec-resumen" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+                    <h2 class="text-lg font-bold text-gray-900">Resumen Consolidado de Asistencia</h2>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="exportarResumenExcel()"
+                            class="bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-2 rounded-md text-xs transition">📊
+                            Exportar a Excel</button>
+                        <button onclick="exportarResumenPDF()"
+                            class="bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-2 rounded-md text-xs transition">📄
+                            Exportar a PDF</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6 bg-gray-50 p-4 rounded-lg">
+                    <input type="text" id="busquedaResumen" placeholder="Buscar cédula/nombre..."
+                        class="px-3 py-2 border rounded-md text-sm">
+                    <select id="rolResumen" class="px-3 py-2 border rounded-md text-sm">
+                        <option value="">Todos los Roles</option>
+                        <option value="ESTUDIANTE">ESTUDIANTE</option>
+                        <option value="DOCENTE">DOCENTE</option>
+                        <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
+                        <option value="OBRERO">OBRERO</option>
+                    </select>
+                    <input type="date" id="resumenDesde" class="px-3 py-2 border rounded-md text-sm">
+                    <input type="date" id="resumenHasta" class="px-3 py-2 border rounded-md text-sm">
+                    <button onclick="cargarResumen()"
+                        class="bg-gray-800 hover:bg-gray-900 text-white font-semibold px-4 py-2 rounded-md text-sm transition">Filtrar</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-gray-600">
+                        <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+                            <tr>
+                                <th class="p-3">Cédula</th>
+                                <th class="p-3">Nombre</th>
+                                <th class="p-3">Rol</th>
+                                <th class="p-3">Sección/Dpto</th>
+                                <th class="p-3 text-center">Asistencias</th>
+                                <th class="p-3 text-center">Puntual</th>
+                                <th class="p-3 text-center">Retardos</th>
+                                <th class="p-3 text-center">Salidas Temp.</th>
+                                <th class="p-3 text-center">Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoTablaResumen" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6. SECCIÓN HISTORIAL -->
+        <section id="sec-reportes" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold text-gray-900 mb-4">Historial Detallado de Marcajes</h2>
+                <div class="flex flex-wrap gap-3 mb-6 bg-gray-50 p-4 rounded-lg">
+                    <input type="date" id="filtroDesde" class="px-3 py-2 border rounded-md text-sm">
+                    <input type="date" id="filtroHasta" class="px-3 py-2 border rounded-md text-sm">
+                    <button onclick="cargarReporte()"
+                        class="bg-gray-800 hover:bg-gray-900 text-white font-semibold px-4 py-2 rounded-md text-sm transition">Buscar
+                        Marcajes</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-gray-600">
+                        <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+                            <tr>
+                                <th class="p-3">Fecha / Hora</th>
+                                <th class="p-3">Cédula</th>
+                                <th class="p-3">Nombre</th>
+                                <th class="p-3">Rol</th>
+                                <th class="p-3">Sección</th>
+                                <th class="p-3">Tipo</th>
+                                <th class="p-3">Evaluación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoTablaReporte" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7. SECCIÓN CONFIGURACIÓN (GSM Y WHATSAPP) -->
+        <section id="sec-config" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- PANEL GENERAL Y CANAL DE NOTIFICACIONES -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-lg font-bold text-gray-900 mb-4">Configuración del Sistema y Notificaciones</h2>
+                    <form id="formConfig" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Nombre de la
+                                Institución</label>
+                            <input type="text" id="cfgNombreInstitucion"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Canal de
+                                Notificaciones</label>
+                            <select id="cfgModoNotificacion" onchange="togglePanelesNotificacion()"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="NINGUNO">DESACTIVADO (No enviar mensajes)</option>
+                                <option value="WHATSAPP">WHATSAPP API (Recomendado Cloud/Luz)</option>
+                                <option value="SMS">SMS GSM (Módem Físico / Sin Internet)</option>
+                                <option value="AMBOS">AMBOS (WhatsApp + SMS)</option>
+                            </select>
+                        </div>
+
+                        <!-- PANEL ESPECÍFICO WHATSAPP -->
+                        <div id="panelConfigWhatsapp" class="border p-4 rounded-lg bg-green-50 space-y-3">
+                            <h3 class="text-sm font-bold text-green-900">Parámetros WhatsApp API</h3>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">URL Endpoint WhatsApp
+                                    API</label>
+                                <input type="text" id="cfgWpUrl" placeholder="https://api.green-api.com o Twilio"
+                                    class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-green-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">Instance ID / Account
+                                    SID</label>
+                                <input type="text" id="cfgWpInstance" placeholder="Ej: 7103829101"
+                                    class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-green-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">Token de Autorización
+                                    API</label>
+                                <input type="password" id="cfgWpToken" placeholder="••••••••••••••••••••"
+                                    class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-green-500 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <!-- PANEL ESPECÍFICO GSM SMS -->
+                        <div id="panelConfigGsm" class="border p-4 rounded-lg bg-gray-50 space-y-3">
+                            <h3 class="text-sm font-bold text-gray-800">Parámetros Módem GSM (SMS)</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Puerto COM / Serie</label>
+                                    <input type="text" id="cfgGsmPuerto" placeholder="Ej: COM3"
+                                        class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Baudios</label>
+                                    <input type="text" id="cfgGsmBaud" placeholder="9600"
+                                        class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md text-sm transition">Guardar
+                            Configuración</button>
+                    </form>
+                </div>
+
+                <!-- PANEL PRUEBAS DE MESAJE -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-lg font-bold text-gray-900 mb-4">Probar Envío de Notificación</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Canal de Prueba</label>
+                            <select id="pruebaCanal" class="w-full px-3 py-2 border rounded-md text-sm">
+                                <option value="WHATSAPP">WhatsApp</option>
+                                <option value="SMS">SMS GSM</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Teléfono Destino (Con
+                                código de país)</label>
+                            <input type="text" id="pruebaTelefono" placeholder="Ej: +584141234567"
+                                class="w-full px-3 py-2 border rounded-md text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-gray-600 mb-1">Mensaje de
+                                Prueba</label>
+                            <textarea id="pruebaMensaje" rows="3"
+                                class="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">C.E.I.E. José Ángel Lamas: Notificación de prueba del sistema de asistencia.</textarea>
+                        </div>
+                        <button onclick="probarEnvioNotificacion()" type="button"
+                            class="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-2 rounded-md text-sm transition">Enviar
+                            Mensaje de Prueba</button>
+                        <div id="resultadoPruebaNotificacion"
+                            class="hidden rounded-lg border p-3 text-sm font-mono bg-gray-50 border-gray-200"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- SCRIPTS LÓGICA DE INTERACCIÓN Y SINCRONIZACIÓN -->
+    <script>
+        // --- ESTADO GLOBAL ---
+        let listaFichasMemoria = [];
+        let listaHorariosMemoria = [];
+        let datosResumenActual = [];
+        let datosReporteActual = [];
+
+        // --- CONFIGURACIÓN DE CONEXIÓN HÍBRIDA / NUBE ---
+        const URL_NUBE = "https://mi-escuela-asistencia.onrender.com"; // Reemplazar por tu URL desplegada
+        const ES_LOCAL = window.location.hostname === "localhost" || window.location.hostname.startsWith("192.168.");
+        const API_BASE_URL = ES_LOCAL ? "" : URL_NUBE;
+
+        // --- NAVEGACIÓN Y PESTAÑAS ---
+        function cambiarPestana(idPestana) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('text-gray-300');
+            });
+
+            const seccionActiva = document.getElementById(idPestana);
+            if (seccionActiva) seccionActiva.classList.remove('hidden');
+
+            const btnId = 'btn-' + idPestana.replace('sec-', '');
+            const btnActivo = document.getElementById(btnId);
+            if (btnActivo) {
+                btnActivo.classList.add('bg-blue-600', 'text-white');
+                btnActivo.classList.remove('text-gray-300');
+            }
+
+            if (idPestana === 'sec-marcaje') {
+                setTimeout(() => {
+                    const input = document.getElementById('inputMarcaje');
+                    if (input) input.focus();
+                }, 100);
+            }
+            if (idPestana === 'sec-horarios') {
+                cargarPersonalHorarioSelect();
+            }
+        }
+
+        // --- INICIALIZACIÓN PRINCIPAL ---
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarListaFichas();
+            cargarListaHorarios();
+            cargarConfiguracion();
+            construirTablaSemanal();
+
+            const hoy = new Date().toISOString().split('T')[0];
+            ['resumenDesde', 'resumenHasta', 'filtroDesde', 'filtroHasta', 'fechaDesde', 'fechaHasta'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = hoy;
+            });
+
+            const formFicha = document.getElementById('formFicha');
+            if (formFicha) formFicha.addEventListener('submit', guardarFicha);
+
+            const formHorario = document.getElementById('formHorario');
+            if (formHorario) formHorario.addEventListener('submit', guardarHorario);
+
+            const formPermiso = document.getElementById('formPermiso');
+            if (formPermiso) formPermiso.addEventListener('submit', guardarPermiso);
+
+            const formConfig = document.getElementById('formConfig');
+            if (formConfig) formConfig.addEventListener('submit', guardarConfiguracion);
+
+            const inputMarcaje = document.getElementById('inputMarcaje');
+            if (inputMarcaje) {
+                inputMarcaje.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        procesarMarcaje();
+                    }
+                });
+            }
+
+            const inputCedula = document.getElementById('cedula');
+            if (inputCedula) {
+                inputCedula.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        buscarFichaPorCedula();
+                    }
+                });
+            }
+
+            // Sincronización automática periódica
+            window.addEventListener('online', ejecutarSincronizacionManual);
+            if (ES_LOCAL) {
+                setInterval(ejecutarSincronizacionManual, 5 * 60 * 1000);
+            }
+        });
+
+        // --- FUNCIONES DE INTERFAZ Y COMPONENTES ---
+        function mostrarToast(mensaje, colorBg = "bg-blue-600") {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.className = `fixed bottom-4 right-4 text-white px-4 py-2 rounded shadow-lg transition-all text-sm font-semibold z-50 ${colorBg}`;
+                toast.innerText = mensaje;
+                toast.classList.remove('hidden');
+                setTimeout(() => toast.classList.add('hidden'), 4000);
+            }
+        }
+
+        function togglePanelesNotificacion() {
+            const modo = document.getElementById('cfgModoNotificacion').value;
+            const pWp = document.getElementById('panelConfigWhatsapp');
+            const pGsm = document.getElementById('panelConfigGsm');
+
+            pWp.classList.toggle('hidden', modo !== 'WHATSAPP' && modo !== 'AMBOS');
+            pGsm.classList.toggle('hidden', modo !== 'SMS' && modo !== 'AMBOS');
+        }
+
+        async function ejecutarSincronizacionManual() {
+            if (!navigator.onLine) {
+                mostrarToast("Modo Offline: Operando en servidor local.", "bg-yellow-600");
+                return;
+            }
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/sincronizar`, { method: 'POST' });
+                if (resp.ok) {
+                    mostrarToast("Sincronización con la Nube completada con éxito.", "bg-green-600");
+                    cargarListaFichas();
+                }
+            } catch (err) {
+                console.warn("Servidor Nube no alcanzable por ahora.", err);
+            }
+        }
+
+        function construirTablaSemanal() {
+            const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+            const tbody = document.getElementById('tablaHorarioSemanal');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            dias.forEach((dia, idx) => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-2 font-medium">${dia}</td>
+                        <td class="p-2"><input type="time" id="entrada_${idx}" class="w-full p-1 border rounded text-xs text-center"></td>
+                        <td class="p-2"><input type="time" id="salida_${idx}" class="w-full p-1 border rounded text-xs text-center"></td>
+                    </tr>
+                `;
+            });
+        }
+
+        function toggleCamposEstudiante() {
+            const rol = document.getElementById('rolPersona').value;
+            const lbl = document.getElementById('lblAnoSeccion');
+            if (lbl) {
+                lbl.innerText = (rol === 'ESTUDIANTE') ? 'Año y Sección' : 'Departamento / Área';
+            }
+        }
+
+        function alternarTipoHorario() {
+            const esSeccion = document.getElementById('tipoSeccion').checked;
+            document.getElementById('camposSeccion').classList.toggle('hidden', !esSeccion);
+            document.getElementById('camposPersonal').classList.toggle('hidden', esSeccion);
+        }
+
+        // --- OPERACIONES DE DATOS (API REST JAVA) ---
+        async function procesarMarcaje() {
+            const input = document.getElementById('inputMarcaje');
+            const valor = input.value.trim();
+            if (!valor) return;
+
+            const radioSeleccionado = document.querySelector('input[name="tipoEvento"]:checked');
+            const tipoEvento = radioSeleccionado ? radioSeleccionado.value : 'AUTO';
+
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/marcaje`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codigo: valor, tipoEvento: tipoEvento })
+                });
+                const res = await resp.json();
+
+                if (resp.ok) {
+                    mostrarToast(`Marcaje registrado: ${res.nombreCompleto}`, "bg-green-600");
+                    mostrarTarjetaMarcaje(res);
+                } else {
+                    mostrarToast(res.error || "Error al registrar marcaje", "bg-red-600");
+                }
+            } catch (e) {
+                mostrarToast("Error de conexión con el servidor", "bg-red-600");
+            }
+            input.value = '';
+            input.focus();
+        }
+
+        function mostrarTarjetaMarcaje(data) {
+            const card = document.getElementById('tarjetaUltimoMarcaje');
+            if (!card) return;
+            card.className = "bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-4";
+            card.innerHTML = `
+                <div>
+                    <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">${data.tipoMarcaje || 'ASISTENCIA'}</span>
+                    <h3 class="text-xl font-bold text-gray-900">${data.nombreCompleto}</h3>
+                    <p class="text-sm text-gray-600">C.I: ${data.cedula} | ${data.rol} - ${data.anoSeccion || ''}</p>
+                    ${data.notificacionWp ? `<p class="text-xs text-green-700 font-bold mt-1">📲 WhatsApp enviado al representante</p>` : ''}
+                </div>
+                <div class="text-right">
+                    <span class="text-2xl font-mono font-bold text-gray-800">${data.hora}</span>
+                    <p class="text-xs font-semibold px-2 py-1 rounded bg-blue-100 text-blue-800 mt-1">${data.evaluacion || 'PUNTUAL'}</p>
+                </div>
+            `;
+            card.classList.remove('hidden');
+        }
+
+        async function cargarListaFichas() {
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/fichas`);
+                if (resp.ok) {
+                    listaFichasMemoria = await resp.json();
+                    renderizarTablaFichas(listaFichasMemoria);
+                }
+            } catch (e) {
+                console.warn("No se pudieron cargar las fichas", e);
+            }
+        }
+
+        function renderizarTablaFichas(lista) {
+            const tbody = document.getElementById('cuerpoTablaFichas');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            lista.forEach(f => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-3 font-mono text-xs">${f.cedula}</td>
+                        <td class="p-3 font-semibold text-gray-800">${f.nombreCompleto}</td>
+                        <td class="p-3 text-xs"><span class="px-2 py-1 rounded bg-gray-100 font-bold">${f.rol}</span></td>
+                        <td class="p-3 text-xs">${f.anoSeccion || '-'}</td>
+                        <td class="p-3 text-xs font-mono">${f.telefono || '-'}</td>
+                        <td class="p-3 text-center">
+                            <button onclick="editarFicha('${f.cedula}')" class="text-blue-600 hover:text-blue-800 font-bold text-xs mr-2">Editar</button>
+                            <button onclick="eliminarFicha('${f.cedula}')" class="text-red-600 hover:text-red-800 font-bold text-xs">Eliminar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filtrarFichasLocales() {
+            const query = document.getElementById('buscarFichaInput').value.toLowerCase();
+            const filtradas = listaFichasMemoria.filter(f =>
+                f.cedula.toLowerCase().includes(query) ||
+                f.nombreCompleto.toLowerCase().includes(query)
+            );
+            renderizarTablaFichas(filtradas);
+        }
+
+        async function guardarFicha(e) {
+            e.preventDefault();
+            const bodyData = {
+                idOriginal: document.getElementById('fichaIdOriginal').value,
+                cedula: document.getElementById('cedula').value.trim(),
+                codigoRfid: document.getElementById('codigoRfid').value.trim(),
+                nombreCompleto: document.getElementById('nombreCompleto').value.trim(),
+                rol: document.getElementById('rolPersona').value,
+                anoSeccion: document.getElementById('anoSeccion').value.trim(),
+                telefono: document.getElementById('telefono').value.trim()
+            };
+
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/fichas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                });
+                if (resp.ok) {
+                    mostrarToast("Ficha guardada correctamente", "bg-green-600");
+                    limpiarFormularioFicha();
+                    cargarListaFichas();
+                } else {
+                    mostrarToast("Error al guardar la ficha", "bg-red-600");
+                }
+            } catch (err) {
+                mostrarToast("Error de comunicación", "bg-red-600");
+            }
+        }
+
+        function buscarFichaPorCedula() {
+            const ci = document.getElementById('cedula').value.trim();
+            const ficha = listaFichasMemoria.find(f => f.cedula === ci);
+            if (ficha) {
+                editarFicha(ci);
+            } else {
+                mostrarToast("Cédula no encontrada para edición", "bg-yellow-600");
+            }
+        }
+
+        function editarFicha(cedula) {
+            const f = listaFichasMemoria.find(item => item.cedula === cedula);
+            if (!f) return;
+            document.getElementById('fichaIdOriginal').value = f.cedula;
+            document.getElementById('cedula').value = f.cedula;
+            document.getElementById('codigoRfid').value = f.codigoRfid || '';
+            document.getElementById('nombreCompleto').value = f.nombreCompleto;
+            document.getElementById('rolPersona').value = f.rol;
+            document.getElementById('anoSeccion').value = f.anoSeccion || '';
+            document.getElementById('telefono').value = f.telefono || '';
+
+            document.getElementById('tituloFormFicha').innerText = "Editar Ficha";
+            document.getElementById('btnSubmitFicha').innerText = "Actualizar Ficha";
+            document.getElementById('btnCancelarEdicion').classList.remove('hidden');
+            toggleCamposEstudiante();
+        }
+
+        function limpiarFormularioFicha() {
+            document.getElementById('formFicha').reset();
+            document.getElementById('fichaIdOriginal').value = '';
+            document.getElementById('tituloFormFicha').innerText = "Crear Nueva Ficha";
+            document.getElementById('btnSubmitFicha').innerText = "Guardar Ficha";
+            document.getElementById('btnCancelarEdicion').classList.add('hidden');
+        }
+
+        async function eliminarFicha(cedula) {
+            if (!confirm(`¿Está seguro de eliminar la ficha CI: ${cedula}?`)) return;
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/fichas/${cedula}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    mostrarToast("Ficha eliminada", "bg-green-600");
+                    cargarListaFichas();
+                }
+            } catch (e) {
+                mostrarToast("No se pudo eliminar", "bg-red-600");
+            }
+        }
+
+        // --- HORARIOS, PERMISOS, RESUMEN Y CONFIGURACIÓN ---
+        function cargarPersonalHorarioSelect() {
+            const select = document.getElementById('cedulaPersonalHorario');
+            if (!select) return;
+            select.innerHTML = '<option value="">-- Seleccione una ficha de personal --</option>';
+            const personal = listaFichasMemoria.filter(f => f.rol !== 'ESTUDIANTE');
+            personal.forEach(p => {
+                select.innerHTML += `<option value="${p.cedula}">${p.nombreCompleto} (${p.rol})</option>`;
+            });
+        }
+
+        async function cargarListaHorarios() {
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/horarios`);
+                if (resp.ok) {
+                    listaHorariosMemoria = await resp.json();
+                    renderizarTablaHorarios(listaHorariosMemoria);
+                }
+            } catch (e) { }
+        }
+
+        function renderizarTablaHorarios(lista) {
+            const tbody = document.getElementById('cuerpoTablaHorarios');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            lista.forEach(h => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-3 text-xs font-bold">${h.tipo}</td>
+                        <td class="p-3 text-xs">${h.destino}</td>
+                        <td class="p-3 text-xs font-mono">${h.resumenSemanal || 'Configurado'}</td>
+                        <td class="p-3 text-center text-xs font-mono">${h.tolerancia} min</td>
+                        <td class="p-3 text-center">
+                            <button onclick="eliminarHorario('${h.id}')" class="text-red-600 font-bold text-xs">Eliminar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function guardarHorario(e) {
+            e.preventDefault();
+            const esSeccion = document.getElementById('tipoSeccion').checked;
+            const horario = [];
+            for (let i = 0; i < 7; i++) {
+                horario.push({
+                    dia: i,
+                    entrada: document.getElementById(`entrada_${i}`).value,
+                    salida: document.getElementById(`salida_${i}`).value
+                });
+            }
+
+            const bodyData = {
+                tipo: esSeccion ? 'SECCION' : 'PERSONAL',
+                ano: document.getElementById('anoHorario').value,
+                seccion: document.getElementById('seccionHorario').value,
+                cedulaPersonal: document.getElementById('cedulaPersonalHorario').value,
+                tolerancia: document.getElementById('tolerancia').value,
+                dias: horario
+            };
+
+            const resp = await fetch(`${API_BASE_URL}/api/horarios`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+            if (resp.ok) {
+                mostrarToast("Horario guardado correctamente", "bg-green-600");
+                cargarListaHorarios();
+            }
+        }
+
+        async function eliminarHorario(id) {
+            if (!confirm("¿Desea eliminar este horario?")) return;
+            await fetch(`${API_BASE_URL}/api/horarios/${id}`, { method: 'DELETE' });
+            cargarListaHorarios();
+        }
+
+        async function guardarPermiso(e) {
+            e.preventDefault();
+            const data = {
+                cedula: document.getElementById('cedulaPermiso').value,
+                tipo: document.getElementById('tipoPermiso').value,
+                desde: document.getElementById('fechaDesde').value,
+                hasta: document.getElementById('fechaHasta').value,
+                motivo: document.getElementById('motivo').value
+            };
+            const resp = await fetch(`${API_BASE_URL}/api/permisos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (resp.ok) {
+                mostrarToast("Permiso registrado exitosamente", "bg-green-600");
+                document.getElementById('formPermiso').reset();
+            }
+        }
+
+        async function cargarResumen() {
+            const params = new URLSearchParams({
+                busqueda: document.getElementById('busquedaResumen').value,
+                rol: document.getElementById('rolResumen').value,
+                desde: document.getElementById('resumenDesde').value,
+                hasta: document.getElementById('resumenHasta').value
+            });
+            const resp = await fetch(`${API_BASE_URL}/api/resumen?${params}`);
+            if (resp.ok) {
+                datosResumenActual = await resp.json();
+                const tbody = document.getElementById('cuerpoTablaResumen');
+                tbody.innerHTML = '';
+                datosResumenActual.forEach(r => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-3 font-mono text-xs">${r.cedula}</td>
+                            <td class="p-3 text-xs font-semibold">${r.nombre}</td>
+                            <td class="p-3 text-xs">${r.rol}</td>
+                            <td class="p-3 text-xs">${r.seccion || '-'}</td>
+                            <td class="p-3 text-center text-xs font-mono font-bold">${r.asistencias}</td>
+                            <td class="p-3 text-center text-xs font-mono text-green-600">${r.puntual}</td>
+                            <td class="p-3 text-center text-xs font-mono text-yellow-600">${r.retardos}</td>
+                            <td class="p-3 text-center text-xs font-mono text-orange-600">${r.salidasTempranas}</td>
+                            <td class="p-3 text-center text-xs font-mono text-blue-600">${r.permisos}</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        async function cargarReporte() {
+            const desde = document.getElementById('filtroDesde').value;
+            const hasta = document.getElementById('filtroHasta').value;
+            const resp = await fetch(`${API_BASE_URL}/api/reportes?desde=${desde}&hasta=${hasta}`);
+            if (resp.ok) {
+                datosReporteActual = await resp.json();
+                const tbody = document.getElementById('cuerpoTablaReporte');
+                tbody.innerHTML = '';
+                datosReporteActual.forEach(m => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-3 font-mono text-xs">${m.fechaHora}</td>
+                            <td class="p-3 font-mono text-xs">${m.cedula}</td>
+                            <td class="p-3 text-xs font-semibold">${m.nombre}</td>
+                            <td class="p-3 text-xs">${m.rol}</td>
+                            <td class="p-3 text-xs">${m.seccion || '-'}</td>
+                            <td class="p-3 text-xs font-bold">${m.tipo}</td>
+                            <td class="p-3 text-xs">${m.evaluacion}</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        async function cargarConfiguracion() {
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/configuracion`);
+                if (resp.ok) {
+                    const cfg = await resp.json();
+                    document.getElementById('cfgNombreInstitucion').value = cfg.nombreInstitucion || '';
+                    document.getElementById('cfgModoNotificacion').value = cfg.modoNotificacion || 'NINGUNO';
+                    document.getElementById('cfgWpUrl').value = cfg.wpUrl || '';
+                    document.getElementById('cfgWpInstance').value = cfg.wpInstance || '';
+                    document.getElementById('cfgWpToken').value = cfg.wpToken || '';
+                    document.getElementById('cfgGsmPuerto').value = cfg.gsmPuerto || 'COM3';
+                    document.getElementById('cfgGsmBaud').value = cfg.gsmBaud || '9600';
+                    togglePanelesNotificacion();
+                }
+            } catch (e) { }
+        }
+
+        async function guardarConfiguracion(e) {
+            e.preventDefault();
+            const cfg = {
+                nombreInstitucion: document.getElementById('cfgNombreInstitucion').value,
+                modoNotificacion: document.getElementById('cfgModoNotificacion').value,
+                wpUrl: document.getElementById('cfgWpUrl').value,
+                wpInstance: document.getElementById('cfgWpInstance').value,
+                wpToken: document.getElementById('cfgWpToken').value,
+                gsmPuerto: document.getElementById('cfgGsmPuerto').value,
+                gsmBaud: document.getElementById('cfgGsmBaud').value
+            };
+            const resp = await fetch(`${API_BASE_URL}/api/configuracion`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cfg)
+            });
+            if (resp.ok) {
+                mostrarToast("Configuración guardada", "bg-green-600");
+            }
+        }
+
+        async function probarEnvioNotificacion() {
+            const canal = document.getElementById('pruebaCanal').value;
+            const tel = document.getElementById('pruebaTelefono').value;
+            const msj = document.getElementById('pruebaMensaje').value;
+            const resDiv = document.getElementById('resultadoPruebaNotificacion');
+
+            const resp = await fetch(`${API_BASE_URL}/api/probar-notificacion`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ canal: canal, telefono: tel, mensaje: msj })
+            });
+            const data = await resp.json();
+            resDiv.innerText = JSON.stringify(data, null, 2);
+            resDiv.classList.remove('hidden');
+        }
+
+        // EXPORTACIONES A EXCEL Y PDF
+        function exportarResumenExcel() {
+            if (!datosResumenActual.length) return mostrarToast("No hay datos para exportar", "bg-yellow-600");
+            const ws = XLSX.utils.json_to_sheet(datosResumenActual);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Resumen");
+            XLSX.writeFile(wb, "Resumen_Asistencia.xlsx");
+        }
+
+        function exportarResumenPDF() {
+            if (!datosResumenActual.length) return mostrarToast("No hay datos para exportar", "bg-yellow-600");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("Resumen Consolidado de Asistencia", 14, 15);
+            doc.autoTable({
+                startY: 20,
+                head: [['Cédula', 'Nombre', 'Rol', 'Sección', 'Asist.', 'Puntual', 'Retardos']],
+                body: datosResumenActual.map(r => [r.cedula, r.nombre, r.rol, r.seccion || '-', r.asistencias, r.puntual, r.retardos])
+            });
+            doc.save("Resumen_Asistencia.pdf");
+        }
+    </script>
+</body>
+
+</html>
